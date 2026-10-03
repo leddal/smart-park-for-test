@@ -1,0 +1,30 @@
+<script setup lang="ts">
+import { onMounted, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { getPage, post } from '@/api/resources'
+import { problemMessage } from '@/api/http'
+import { useSessionStore } from '@/stores/session'
+import { formatDate } from '@/utils/format'
+
+interface Account { id: string; userName: string; displayName: string; roles: string[]; disabled: boolean; createdAt?: string }
+const session = useSessionStore()
+const accounts = ref<{ items: Account[]; total: number; page: number; pageSize: number }>(emptyPage<Account>())
+const loading = ref(true)
+const error = ref('')
+const submitting = ref(false)
+const createDialog = ref(false)
+const resetDialog = ref(false)
+const selected = ref<Account>()
+const form = reactive({ userName: '', displayName: '', password: '', role: 'Worker' })
+const resetPassword = ref('')
+function emptyPage<T>(): { items: T[]; total: number; page: number; pageSize: number } { return { items: [], total: 0, page: 1, pageSize: 20 } }
+function resetForm(): void { Object.assign(form, { userName: '', displayName: '', password: '', role: 'Worker' }) }
+async function load(): Promise<void> { loading.value = true; error.value = ''; try { accounts.value = await getPage<Account>('/auth/users', { page: accounts.value.page, pageSize: accounts.value.pageSize }) } catch (exception) { error.value = problemMessage(exception) } finally { loading.value = false } }
+async function create(): Promise<void> { if (!form.userName.trim() || !form.displayName.trim() || !form.password) return ElMessage.warning('请填写用户名、显示名称和密码。'); submitting.value = true; try { await post('/auth/users', { userName: form.userName.trim(), displayName: form.displayName.trim(), password: form.password, roles: [form.role] }); createDialog.value = false; resetForm(); await load(); ElMessage.success('内部账号已创建。') } catch (exception) { ElMessage.error(problemMessage(exception)) } finally { submitting.value = false } }
+async function reset(): Promise<void> { if (!selected.value || !resetPassword.value) return ElMessage.warning('请输入新密码。'); submitting.value = true; try { await post(`/auth/users/${selected.value.id}/reset`, { password: resetPassword.value }); resetDialog.value = false; resetPassword.value = ''; ElMessage.success('密码已重置。') } catch (exception) { ElMessage.error(problemMessage(exception)) } finally { submitting.value = false } }
+async function setDisabled(item: Account, disabled: boolean): Promise<void> { if (item.id === session.user?.id) return ElMessage.warning('不能停用当前登录账户。'); try { await ElMessageBox.confirm(`${disabled ? '停用' : '启用'}“${item.displayName || item.userName}”？`, '确认账号状态变更', { type: 'warning' }); await post(`/auth/users/${item.id}/disable`, { disabled }); await load(); ElMessage.success(disabled ? '账号已停用。' : '账号已启用。') } catch (exception) { if (exception !== 'cancel' && exception !== 'close') ElMessage.error(problemMessage(exception)) } }
+function changePage(page: number): void { accounts.value.page = page; void load() }
+onMounted(() => { void load() })
+</script>
+<template><div class="page"><div class="page-heading"><div><h1>内部账号</h1><p>仅管理员可创建、重置或停用内部账户；游客账号不在此处创建。</p></div><el-button type="primary" @click="resetForm(); createDialog = true">创建内部账号</el-button></div><el-alert v-if="error" type="error" :title="error" :closable="false" /><section class="surface table-panel" v-loading="loading"><el-table :data="accounts.items" empty-text="暂无内部账号"><el-table-column prop="userName" label="用户名" min-width="150" /><el-table-column prop="displayName" label="显示名称" min-width="140" /><el-table-column label="角色" min-width="180"><template #default="scope"><el-tag v-for="role in scope.row.roles" :key="role" class="role-tag">{{ role }}</el-tag></template></el-table-column><el-table-column label="状态" width="110"><template #default="scope"><el-tag :type="scope.row.disabled ? 'danger' : 'success'">{{ scope.row.disabled ? '已停用' : '已启用' }}</el-tag></template></el-table-column><el-table-column label="创建时间" width="180"><template #default="scope">{{ formatDate(scope.row.createdAt) }}</template></el-table-column><el-table-column label="操作" width="220" fixed="right"><template #default="scope"><el-button link type="primary" @click="selected = scope.row; resetDialog = true">重置密码</el-button><el-button v-if="scope.row.id !== session.user?.id" link :type="scope.row.disabled ? 'success' : 'danger'" @click="setDisabled(scope.row, !scope.row.disabled)">{{ scope.row.disabled ? '启用' : '停用' }}</el-button></template></el-table-column></el-table><el-pagination v-if="accounts.total > accounts.pageSize" layout="prev, pager, next" :current-page="accounts.page" :page-size="accounts.pageSize" :total="accounts.total" @current-change="changePage" /></section><el-dialog v-model="createDialog" title="创建内部账号" width="520px" :close-on-click-modal="false"><el-form label-position="top"><el-form-item label="用户名" required><el-input v-model="form.userName" autocomplete="off" /></el-form-item><el-form-item label="显示名称" required><el-input v-model="form.displayName" /></el-form-item><el-form-item label="初始密码" required><el-input v-model="form.password" type="password" show-password autocomplete="new-password" /></el-form-item><el-form-item label="内部角色" required><el-select v-model="form.role"><el-option label="管理员" value="Administrator" /><el-option label="调度员" value="Dispatcher" /><el-option label="作业人员" value="Worker" /></el-select></el-form-item><el-button type="primary" :loading="submitting" @click="create">创建账号</el-button></el-form></el-dialog><el-dialog v-model="resetDialog" title="重置密码" width="460px"><p>为 {{ selected?.displayName || selected?.userName }} 设置新密码。</p><el-input v-model="resetPassword" type="password" show-password autocomplete="new-password" /><template #footer><el-button @click="resetDialog = false">取消</el-button><el-button type="primary" :loading="submitting" @click="reset">确认重置</el-button></template></el-dialog></div></template>
+<style scoped>.table-panel { padding:18px; }.role-tag { margin-right:5px; }</style>

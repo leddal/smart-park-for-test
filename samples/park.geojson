@@ -1,0 +1,13 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {"type":"Feature","id":"boundary-1","properties":{"externalId":"boundary-1","name":"澄园示例边界","layer":"Boundary","kind":"Boundary"},"geometry":{"type":"Polygon","coordinates":[[[121.435,31.164],[121.440,31.164],[121.440,31.168],[121.435,31.168],[121.435,31.164]]]}},
+    {"type":"Feature","id":"road-1","properties":{"externalId":"road-1","name":"林荫园路南段","layer":"Road","kind":"Road"},"geometry":{"type":"LineString","coordinates":[[121.436,31.165],[121.4375,31.165]]}},
+    {"type":"Feature","id":"road-2","properties":{"externalId":"road-2","name":"湖畔园路","layer":"Road","kind":"Road"},"geometry":{"type":"LineString","coordinates":[[121.4375,31.165],[121.4385,31.1665]]}},
+    {"type":"Feature","id":"road-3","properties":{"externalId":"road-3","name":"林荫园路北段","layer":"Road","kind":"Road"},"geometry":{"type":"LineString","coordinates":[[121.4385,31.1665],[121.436,31.167]]}},
+    {"type":"Feature","id":"road-4","properties":{"externalId":"road-4","name":"西侧园路","layer":"Road","kind":"Road"},"geometry":{"type":"LineString","coordinates":[[121.436,31.167],[121.436,31.165]]}},
+    {"type":"Feature","id":"poi-gate","properties":{"externalId":"poi-gate","name":"南门","layer":"POI","kind":"POI"},"geometry":{"type":"Point","coordinates":[121.436,31.165]}},
+    {"type":"Feature","id":"poi-lake","properties":{"externalId":"poi-lake","name":"观景平台","layer":"POI","kind":"POI"},"geometry":{"type":"Point","coordinates":[121.4385,31.1665]}},
+    {"type":"Feature","id":"poi-garden","properties":{"externalId":"poi-garden","name":"植物科普园","layer":"POI","kind":"POI"},"geometry":{"type":"Point","coordinates":[121.436,31.167]}}
+  ]
+}

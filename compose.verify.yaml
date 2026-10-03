@@ -1,0 +1,152 @@
+name: smartpark-verify
+x-postgres: &postgres
+  image: postgres:17
+  healthcheck:
+    test: [CMD-SHELL, 'pg_isready -U park -d "$${POSTGRES_DB}"']
+    interval: 3s
+    timeout: 3s
+    retries: 40
+x-e2e-environment: &e2e-environment
+  ASPNETCORE_URLS: http://+:8080
+  ASPNETCORE_ENVIRONMENT: Development
+  ConnectionStrings__ParkDb: Host=postgres-e2e;Database=smartpark_e2e;Username=park;Password=VerifyDatabase!2026
+  ConnectionStrings__Redis: redis:6379,abortConnect=false,connectTimeout=1000,syncTimeout=1000
+  Demo__Enabled: 'true'
+  Demo__Password: ParkDemo!2026
+  Storage__Root: /uploads
+  Storage__KeysPath: /keys
+services:
+  postgres-test:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: smartpark_test
+      POSTGRES_USER: park
+      POSTGRES_PASSWORD: VerifyDatabase!2026
+    volumes:
+      - test-database:/var/lib/postgresql/data
+  postgres-e2e:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: smartpark_e2e
+      POSTGRES_USER: park
+      POSTGRES_PASSWORD: VerifyDatabase!2026
+    volumes:
+      - e2e-database:/var/lib/postgresql/data
+  postgres-benchmark:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: smartpark_benchmark
+      POSTGRES_USER: park
+      POSTGRES_PASSWORD: VerifyDatabase!2026
+    volumes:
+      - benchmark-database:/var/lib/postgresql/data
+  redis:
+    image: redis:7.4
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+  migrate:
+    image: smartpark-api:verify
+    build:
+      context: .
+      dockerfile: backend/SmartPark.Api/Dockerfile
+    command: [--migrate, --seed]
+    environment: *e2e-environment
+    volumes:
+      - e2e-uploads:/uploads
+      - e2e-keys:/keys
+    depends_on:
+      postgres-e2e:
+        condition: service_healthy
+  api:
+    image: smartpark-api:verify
+    build:
+      context: .
+      dockerfile: backend/SmartPark.Api/Dockerfile
+    environment: *e2e-environment
+    volumes:
+      - e2e-uploads:/uploads
+      - e2e-keys:/keys
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    healthcheck:
+      test: [CMD-SHELL, 'bash -c ''exec 3<>/dev/tcp/127.0.0.1/8080; printf "GET /api/health/ready HTTP/1.0\r\nHost: localhost\r\n\r\n" >&3; read -r line <&3; [[ "$$line" == *"200"* ]]''']
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 15s
+  web:
+    image: smartpark-web:verify
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD-SHELL, 'wget -q -O /dev/null http://127.0.0.1:8080/healthz']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  backend-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.verify
+      target: backend-tests
+    environment:
+      ConnectionStrings__ParkDb: Host=postgres-test;Database=smartpark_test;Username=park;Password=VerifyDatabase!2026
+      ConnectionStrings__Redis: redis:6379,abortConnect=false,connectTimeout=1000,syncTimeout=1000
+      TEST_ALLOWED: 'true'
+    volumes:
+      - ./artifacts:/artifacts
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+  frontend-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.verify
+      target: frontend-tests
+  e2e:
+    build:
+      context: .
+      dockerfile: Dockerfile.verify
+      target: e2e
+    environment:
+      PLAYWRIGHT_BASE_URL: http://web:8080
+      CI: 'true'
+    volumes:
+      - ./artifacts:/artifacts
+    depends_on:
+      web:
+        condition: service_healthy
+  benchmarks:
+    build:
+      context: .
+      dockerfile: Dockerfile.verify
+      target: benchmarks
+    environment:
+      ConnectionStrings__ParkDb: Host=postgres-benchmark;Database=smartpark_benchmark;Username=park;Password=VerifyDatabase!2026
+      ConnectionStrings__Redis: redis:6379,abortConnect=false,connectTimeout=1000,syncTimeout=1000
+      BENCHMARK_ALLOWED: 'true'
+      BENCHMARK_OUTPUT: /artifacts/benchmarks
+    volumes:
+      - ./artifacts:/artifacts
+    depends_on:
+      postgres-benchmark:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+volumes:
+  test-database:
+  e2e-database:
+  benchmark-database:
+  e2e-uploads:
+  e2e-keys:

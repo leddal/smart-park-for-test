@@ -1,0 +1,3 @@
+code,name,category,zone,longitude,latitude,publicDescription
+DEMO-BENCH-101,林荫休憩座椅,Facility,林荫区,121.436,31.165,示例座椅，CSV 导入后可通过物码查看公开介绍。
+DEMO-PLANT-101,示例香樟,Plant,林荫区,121.436,31.167,植物科普示例资产。

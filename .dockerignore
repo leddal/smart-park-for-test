@@ -1,0 +1,10 @@
+.git
+.plan
+**/bin
+**/obj
+**/node_modules
+**/dist
+artifacts
+.env
+.idea
+.vs

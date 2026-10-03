@@ -1,0 +1,94 @@
+name: smartpark-demo
+x-api-environment: &api-environment
+  ASPNETCORE_URLS: http://+:8080
+  ASPNETCORE_ENVIRONMENT: Development
+  ConnectionStrings__ParkDb: Host=postgres;Database=${POSTGRES_DB:-smartpark_demo};Username=${POSTGRES_USER:-park};Password=${POSTGRES_PASSWORD:-ParkDatabase!2026}
+  ConnectionStrings__Redis: redis:6379,abortConnect=false,connectTimeout=1000,syncTimeout=1000
+  Demo__Enabled: ${DEMO_ENABLED:-true}
+  Demo__Password: ${DEMO_PASSWORD:-ParkDemo!2026}
+  Demo__ParkName: ${PARK_NAME:-澄园智慧公园}
+  Storage__Root: /uploads
+  Storage__KeysPath: /keys
+  TZ: Asia/Shanghai
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-smartpark_demo}
+      POSTGRES_USER: ${POSTGRES_USER:-park}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ParkDatabase!2026}
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+  redis:
+    image: redis:7.4
+    command: [redis-server, --appendonly, 'yes']
+    volumes:
+      - cache:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+  migrate:
+    image: smartpark-api:local
+    build:
+      context: .
+      dockerfile: backend/SmartPark.Api/Dockerfile
+    command: [--migrate, --seed]
+    environment: *api-environment
+    volumes:
+      - uploads:/uploads
+      - keys:/keys
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+  api:
+    image: smartpark-api:local
+    build:
+      context: .
+      dockerfile: backend/SmartPark.Api/Dockerfile
+    environment: *api-environment
+    volumes:
+      - uploads:/uploads
+      - keys:/keys
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    healthcheck:
+      test: [CMD-SHELL, 'bash -c ''exec 3<>/dev/tcp/127.0.0.1/8080; printf "GET /api/health/ready HTTP/1.0\r\nHost: localhost\r\n\r\n" >&3; read -r line <&3; [[ "$$line" == *"200"* ]]''']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    restart: unless-stopped
+  web:
+    image: smartpark-web:local
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - '127.0.0.1:${WEB_PORT:-8080}:8080'
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD-SHELL, 'wget -q -O /dev/null http://127.0.0.1:8080/healthz']
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+volumes:
+  database:
+  cache:
+  uploads:
+  keys:
