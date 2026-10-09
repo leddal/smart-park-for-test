@@ -11,3 +11,9 @@ export interface ActivitySession { id: string; startsAt: string; endsAt: string;
 export interface Activity { id: string; title: string; description: string; location: string; status?: string; sessions?: ActivitySession[]; [key: string]: unknown }
 export interface Device { id: string; code: string; name?: string; type: string; enabled: boolean; model?: string; manufacturer?: string; lastCollectedAt?: string; [key: string]: unknown }
 export interface Alert { id: string; title?: string; deviceId?: string; metricCode?: string; value?: number; unit?: string; severity: string; status?: string; createdAt?: string; eventId?: string; [key: string]: unknown }
+
+export type IntegrationStatus = 'Pending' | 'Published' | 'Succeeded' | 'Failed' | 'SimulatedSucceeded'
+export type IntegrationStage = 'Publish' | 'Consume'
+export interface IntegrationAttemptLog { generation: number; stage: IntegrationStage; attempt: number; attemptedAt?: string; success: boolean; message?: string }
+export interface IntegrationMessage { id: string; platformName?: string; kind: string; status: IntegrationStatus; generation?: number; attempts?: number; publishAttempts?: number; createdAt?: string; publishedAt?: string | null; consumedAt?: string | null; nextAttemptAt?: string; lastError?: string | null; detail?: string | null; attemptLogs?: IntegrationAttemptLog[] }
+export interface IntegrationPipeline { transport: string; queueName: string; deadLetterQueueName: string; pending: number; published: number; succeeded: number; failed: number }

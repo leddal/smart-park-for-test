@@ -114,3 +114,70 @@ test('admin abnormal to dispatcher task to worker review and event closure produ
   await expect(page.getByText('EventClosed', { exact: true }).first()).toBeVisible()
   await capture(page, testInfo, 'closed-event-local-simulation-log')
 })
+
+test('RabbitMQ publishes and consumes a local sync, then replays a failed generation without erasing receipts', async ({ page }, testInfo) => {
+  test.setTimeout(180_000)
+  await login(page, 'admin')
+  const platformsResponse = await page.request.get('/api/integrations/platforms')
+  expect(platformsResponse.ok()).toBeTruthy()
+  const platforms = await platformsResponse.json() as { id: string; enabled: boolean; forceFailure: boolean }[]
+  const platform = platforms[0]!
+  expect(platform).toBeTruthy()
+  const csrfResponse = await page.request.get('/api/auth/csrf')
+  const { token } = await csrfResponse.json() as { token: string }
+  const headers = { 'X-CSRF-TOKEN': token }
+  const configure = async (enabled: boolean, forceFailure: boolean): Promise<void> => {
+    const result = await page.request.put(`/api/integrations/platforms/${platform.id}`, { headers, data: { enabled, forceFailure } })
+    expect(result.ok()).toBeTruthy()
+  }
+  type SyncMessage = { id: string; status: string; generation: number; attempts: number; publishAttempts: number; publishedAt: string | null; consumedAt: string | null; attemptLogs: { generation: number; stage: string; success: boolean }[] }
+  const readMessage = async (id: string): Promise<SyncMessage | undefined> => {
+    const result = await page.request.get('/api/integrations/messages?pageSize=100')
+    expect(result.ok()).toBeTruthy()
+    const payload = await result.json() as { items: SyncMessage[] }
+    return payload.items.find((message) => message.id === id)
+  }
+  try {
+    await configure(true, false)
+    await page.goto('/admin/integrations')
+    await expect(page.getByText('本地消息链路', { exact: true })).toBeVisible()
+    const queued = page.waitForResponse((response) => response.url().endsWith('/api/integrations/sync') && response.request().method() === 'POST')
+    await page.getByRole('button', { name: '资产', exact: true }).first().click()
+    const response = await queued
+    expect(response.status()).toBe(202)
+    const { id } = await response.json() as { id: string }
+    await expect.poll(async () => (await readMessage(id))?.status, { timeout: 30_000 }).toBe('Succeeded')
+    const delivered = (await readMessage(id))!
+    expect(delivered.publishedAt).toBeTruthy()
+    expect(delivered.consumedAt).toBeTruthy()
+    expect(delivered.attempts).toBe(1)
+    expect(delivered.attemptLogs.filter((log) => log.stage === 'Publish' && log.success)).toHaveLength(1)
+    expect(delivered.attemptLogs.filter((log) => log.stage === 'Consume' && log.success)).toHaveLength(1)
+    await page.getByRole('button', { name: '刷新日志', exact: true }).click()
+    const successRow = page.locator('.el-table__row').filter({ has: page.locator(`[data-message-id="${id}"]`) })
+    await expect(successRow).toContainText('本地回执成功')
+    await expect(successRow.getByRole('button', { name: '人工重试' })).toHaveCount(0)
+
+    await configure(true, true)
+    const failureResponse = await page.request.post('/api/integrations/sync', { headers, data: { platformId: platform.id, kind: 'VisitorCount' } })
+    expect(failureResponse.status()).toBe(202)
+    const failedId = (await failureResponse.json() as { id: string }).id
+    await expect.poll(async () => (await readMessage(failedId))?.status, { timeout: 120_000, intervals: [1000] }).toBe('Failed')
+    const failed = (await readMessage(failedId))!
+    expect(failed.attempts).toBe(5)
+    expect(failed.attemptLogs.filter((log) => log.stage === 'Consume' && !log.success)).toHaveLength(5)
+    await configure(true, false)
+    await page.getByRole('button', { name: '刷新日志', exact: true }).click()
+    const failedRow = page.locator('.el-table__row').filter({ has: page.locator(`[data-message-id="${failedId}"]`) })
+    await expect(failedRow).toContainText('重试耗尽')
+    await failedRow.getByRole('button', { name: '人工重试', exact: true }).click()
+    await expect.poll(async () => (await readMessage(failedId))?.status, { timeout: 30_000 }).toBe('Succeeded')
+    const replayed = (await readMessage(failedId))!
+    expect(replayed.generation).toBe(1)
+    expect(replayed.attemptLogs.filter((log) => log.generation === 0)).toHaveLength(failed.attemptLogs.length)
+    expect(replayed.attemptLogs.some((log) => log.generation === 1 && log.stage === 'Consume' && log.success)).toBeTruthy()
+    await capture(page, testInfo, 'rabbitmq-local-pipeline-replay')
+  } finally {
+    await configure(platform.enabled, platform.forceFailure)
+  }
+})

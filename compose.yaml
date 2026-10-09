@@ -4,6 +4,10 @@ x-api-environment: &api-environment
   ASPNETCORE_ENVIRONMENT: Development
   ConnectionStrings__ParkDb: Host=postgres;Database=${POSTGRES_DB:-smartpark_demo};Username=${POSTGRES_USER:-park};Password=${POSTGRES_PASSWORD:-ParkDatabase!2026}
   ConnectionStrings__Redis: redis:6379,abortConnect=false,connectTimeout=1000,syncTimeout=1000
+  RabbitMq__HostName: rabbitmq
+  RabbitMq__UserName: ${RABBITMQ_USER:-park}
+  RabbitMq__Password: ${RABBITMQ_PASSWORD:-ParkMessaging!2026}
+  RabbitMq__QueueName: smartpark.integrations
   Demo__Enabled: ${DEMO_ENABLED:-true}
   Demo__Password: ${DEMO_PASSWORD:-ParkDemo!2026}
   Demo__ParkName: ${PARK_NAME:-澄园智慧公园}
@@ -36,6 +40,21 @@ services:
       timeout: 3s
       retries: 30
     restart: unless-stopped
+  rabbitmq:
+    image: rabbitmq:4.1-alpine
+    hostname: smartpark-demo-rabbitmq
+    stop_grace_period: 60s
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-park}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-ParkMessaging!2026}
+    volumes:
+      - messages:/var/lib/rabbitmq
+    healthcheck:
+      test: [CMD, rabbitmq-diagnostics, -q, check_running]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
   migrate:
     image: smartpark-api:local
     build:
@@ -64,6 +83,8 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_started
+      rabbitmq:
+        condition: service_started
     healthcheck:
       test: [CMD-SHELL, 'bash -c ''exec 3<>/dev/tcp/127.0.0.1/8080; printf "GET /api/health/ready HTTP/1.0\r\nHost: localhost\r\n\r\n" >&3; read -r line <&3; [[ "$$line" == *"200"* ]]''']
       interval: 10s
@@ -90,5 +111,6 @@ services:
 volumes:
   database:
   cache:
+  messages:
   uploads:
   keys:

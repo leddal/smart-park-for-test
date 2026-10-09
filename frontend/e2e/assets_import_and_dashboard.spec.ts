@@ -24,6 +24,10 @@ test('administrator imports CSV assets, verifies QR public route, and dashboard 
 
   await page.goto('/admin/assets')
   await expect(page.getByRole('heading', { name: '资产信息管理' })).toBeVisible()
+  // Reused verification data can span pages; search this import instead of assuming it is on page 1.
+  await expect(page.locator('.table-panel .el-loading-mask')).toHaveCount(0)
+  await page.getByRole('textbox', { name: '搜索资产编码或名称' }).fill(code)
+  await page.getByRole('button', { name: '查询', exact: true }).click()
   const row = page.getByRole('row', { name: new RegExp(code) })
   await expect(row).toBeVisible()
   await row.getByRole('button', { name: '二维码' }).click()

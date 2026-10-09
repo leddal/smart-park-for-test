@@ -11,6 +11,7 @@ using SmartPark.Api.Common;
 using SmartPark.Api.Data;
 using SmartPark.Api.Features.Emergency;
 using SmartPark.Api.Features.IoT;
+using SmartPark.Api.Features.Integrations;
 using SmartPark.Api.Features.Overview;
 using SmartPark.Api.Features.Services;
 using SmartPark.Api.Storage;
@@ -71,7 +72,9 @@ builder.Services.AddMemoryCache();
 if (!string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("Redis"))) builder.Services.AddStackExchangeRedisCache(options => options.Configuration = builder.Configuration.GetConnectionString("Redis")); else builder.Services.AddDistributedMemoryCache();
 builder.Services.AddScoped<AuditService>(); builder.Services.AddScoped<DemoSeeder>(); builder.Services.AddScoped<LocalFileStore>(); builder.Services.AddScoped<ReservationService>(); builder.Services.AddScoped<OverviewQueryService>(); builder.Services.AddScoped<OverviewCacheService>(); builder.Services.AddScoped<TelemetryIngestService>(); builder.Services.AddScoped<VisitorCountIngestService>(); builder.Services.AddScoped<EmergencyService>();
 builder.Services.AddSingleton<SimulationGate>();
-builder.Services.AddHostedService<SimulationHostedService>(); builder.Services.AddHostedService<CommandHostedService>(); builder.Services.AddHostedService<OutboxHostedService>();
+builder.Services.Configure<RabbitMqOptions>(builder.Configuration.GetSection("RabbitMq"));
+builder.Services.AddSingleton<RabbitMqTransport>(); builder.Services.AddSingleton<IOutboxPublisher>(services => services.GetRequiredService<RabbitMqTransport>()); builder.Services.AddScoped<OutboxDeliveryService>();
+builder.Services.AddHostedService<SimulationHostedService>(); builder.Services.AddHostedService<CommandHostedService>(); builder.Services.AddHostedService<OutboxHostedService>(); builder.Services.AddHostedService<IntegrationConsumerHostedService>();
 
 var app = builder.Build();
 if (args.Contains("--migrate", StringComparer.OrdinalIgnoreCase))

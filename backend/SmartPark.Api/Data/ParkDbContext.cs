@@ -60,7 +60,9 @@ public sealed class ParkDbContext(DbContextOptions<ParkDbContext> options) : Ide
         b.Entity<ParkEvent>().HasOne<Alert>().WithMany().HasForeignKey(x => x.AlertId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<ControlCommand>().HasIndex(x => new { x.DeviceId, x.Sequence }); b.Entity<ControlCommand>().HasIndex(x => x.Status);
         b.Entity<OutboxMessage>().HasIndex(x => new { x.Status, x.NextAttemptAt });
-        b.Entity<IntegrationAttempt>().HasIndex(x => new { x.OutboxMessageId, x.Attempt }).IsUnique();
+        // Manual replay starts a new generation; publishing and consuming keep separate immutable logs.
+        b.Entity<IntegrationAttempt>().Property(x => x.Stage).HasDefaultValue("Consume");
+        b.Entity<IntegrationAttempt>().HasIndex(x => new { x.OutboxMessageId, x.Generation, x.Stage, x.Attempt }).IsUnique();
         foreach (var property in b.Model.GetEntityTypes().SelectMany(x => x.GetProperties()).Where(x => x.ClrType == typeof(decimal) || x.ClrType == typeof(decimal?)))
         {
             property.SetPrecision(18);

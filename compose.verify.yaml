@@ -11,6 +11,10 @@ x-e2e-environment: &e2e-environment
   ASPNETCORE_ENVIRONMENT: Development
   ConnectionStrings__ParkDb: Host=postgres-e2e;Database=smartpark_e2e;Username=park;Password=VerifyDatabase!2026
   ConnectionStrings__Redis: redis:6379,abortConnect=false,connectTimeout=1000,syncTimeout=1000
+  RabbitMq__HostName: rabbitmq
+  RabbitMq__UserName: park
+  RabbitMq__Password: VerifyMessaging!2026
+  RabbitMq__QueueName: smartpark.integrations.e2e
   Demo__Enabled: 'true'
   Demo__Password: ParkDemo!2026
   Storage__Root: /uploads
@@ -47,6 +51,20 @@ services:
       interval: 3s
       timeout: 3s
       retries: 40
+  rabbitmq:
+    image: rabbitmq:4.1-alpine
+    hostname: smartpark-verify-rabbitmq
+    stop_grace_period: 60s
+    environment:
+      RABBITMQ_DEFAULT_USER: park
+      RABBITMQ_DEFAULT_PASS: VerifyMessaging!2026
+    volumes:
+      - test-messages:/var/lib/rabbitmq
+    healthcheck:
+      test: [CMD, rabbitmq-diagnostics, -q, check_running]
+      interval: 3s
+      timeout: 5s
+      retries: 40
   migrate:
     image: smartpark-api:verify
     build:
@@ -73,6 +91,8 @@ services:
       migrate:
         condition: service_completed_successfully
       redis:
+        condition: service_started
+      rabbitmq:
         condition: service_started
     healthcheck:
       test: [CMD-SHELL, 'bash -c ''exec 3<>/dev/tcp/127.0.0.1/8080; printf "GET /api/health/ready HTTP/1.0\r\nHost: localhost\r\n\r\n" >&3; read -r line <&3; [[ "$$line" == *"200"* ]]''']
@@ -101,6 +121,11 @@ services:
     environment:
       ConnectionStrings__ParkDb: Host=postgres-test;Database=smartpark_test;Username=park;Password=VerifyDatabase!2026
       ConnectionStrings__Redis: redis:6379,abortConnect=false,connectTimeout=1000,syncTimeout=1000
+      RabbitMq__HostName: rabbitmq
+      RabbitMq__UserName: park
+      RabbitMq__Password: VerifyMessaging!2026
+      RabbitMq__QueueName: smartpark.integrations.test
+      RabbitMq__ConsumerDelayMilliseconds: '0'
       TEST_ALLOWED: 'true'
     volumes:
       - ./artifacts:/artifacts
@@ -108,6 +133,8 @@ services:
       postgres-test:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
   frontend-tests:
     build:
@@ -145,6 +172,7 @@ services:
       redis:
         condition: service_healthy
 volumes:
+  test-messages:
   test-database:
   e2e-database:
   benchmark-database:

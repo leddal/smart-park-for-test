@@ -1,6 +1,6 @@
 # 智慧公园 · 本地桌面演示
 
-.NET 10 模块化单体、Vue 3 / TypeScript、PostgreSQL 17、Redis 7.4。面向单公园的桌面后台、独立大屏与 PC 游客页。业务数据真实持久化；遥测、控制和平台协同明确为本地演示，不接入真实硬件、视频流或外部平台。
+.NET 10 模块化单体、Vue 3 / TypeScript、PostgreSQL 17、Redis 7.4、RabbitMQ 4.1。面向单公园的桌面后台、独立大屏与 PC 游客页。业务数据真实持久化；遥测、控制和平台协同明确为本地演示，不接入真实硬件、视频流或外部平台。
 
 > 仅用于 localhost 演示。默认账号、数据库密码和 HTTP Cookie 配置不得直接用于公网。没有移动端、定位打卡、支付、实名或实际随申码认证。
 
@@ -21,7 +21,7 @@ docker compose logs migrate api web
 
 逐个构建规避当前 Windows Docker Compose/Bake 在中文路径上并行构建时的 `x-docker-expose-session-sharedkey` 非 ASCII 请求头错误，不需要修改 Docker 全局配置。
 
-若 `.env` 已存在，不要覆盖。无需复制也可使用 Compose 中的本地默认值。`migrate` 成功退出（Exit 0）是正常状态，常驻服务为 postgres、redis、api、web。更换端口修改 `.env` 的 `WEB_PORT`，例如 8088，再执行 `docker compose up -d`。
+若 `.env` 已存在，不要覆盖。无需复制也可使用 Compose 中的本地默认值。`migrate` 成功退出（Exit 0）是正常状态，常驻服务为 postgres、redis、rabbitmq、api、web。更换端口修改 `.env` 的 `WEB_PORT`，例如 8088，再执行 `docker compose up -d`。
 
 | 入口 | 地址 | 访问者 |
 |---|---|---|
@@ -31,7 +31,7 @@ docker compose logs migrate api web
 | PC 游客页 | http://localhost:8080/visitor | 匿名浏览、游客预约 |
 | 就绪检查 | http://localhost:8080/api/health/ready | 状态检查 |
 
-仅 web 绑定 `127.0.0.1:8080`；数据库和 Redis 不映射宿主机端口，不影响已有 5432 / 6379 实例。Compose 项目名为 `smartpark-demo`，不会接管已有同名业务数据库或用户容器。
+仅 web 绑定 `127.0.0.1:8080`；数据库、Redis 和 RabbitMQ 不映射宿主机端口，不影响已有 5432 / 6379 / 5672 实例。RabbitMQ 使用独立命名卷与固定节点名，健康检查等待消息应用运行，停止时保留 60 秒宽限；`.env.example` 的 `RABBITMQ_USER/PASSWORD` 仅是本地演示默认值；已有 `.env` 无需覆盖，修改凭据不会重置代理卷中的已有用户。Compose 项目名为 `smartpark-demo`，不会接管已有同名业务数据库或用户容器。
 
 ## 演示账号
 
@@ -63,6 +63,17 @@ docker compose logs migrate api web
 
 同轮异常不会反复建事件；恢复后再次异常会新建一轮。旧采集时间只入历史；重复幂等标识不重复处理。误报需原因并抑制至恢复，而不是删除历史。
 
+### 本地异步架构演示
+
+链路为 **业务事务 + PostgreSQL Outbox → RabbitMQ → 本地模拟消费者 → 持久回执**。发布器和消费者是 API 内两个独立后台任务，网络传输通过真实 broker；不是拆分微服务，也不接官方平台。
+
+1. 进入“外部平台协同”，点击某个平台“资产”等按钮。HTTP 202 只表示消息已入库；页面每 3 秒在可见时刷新，展示消息 ID、代次、发布/消费次数、时间与可展开的阶段日志。
+2. `Pending` 表示待发布或退避，`Published` 表示 RabbitMQ 已确认、等待消费，`Succeeded` 才表示本地模拟回执成功。消费者有 1 秒演示延迟，中间状态可能短于页面轮询间隔；阶段日志仍会保留。
+3. 管理员勾选“注入模拟失败”再生成消息；消费失败按 1、5、15、60 秒退避，第 5 次进入 `Failed` 并拒绝至 `<主队列>.dead`。取消故障注入，点击失败行“人工重试”，代次递增，旧日志不删除；旧代或重复投递不会重复生成回执。
+4. 可用 `docker compose stop rabbitmq` 展示 broker 故障：核心业务继续同事务入库，消息保留在 Outbox；连续 5 次发布失败后终止。用 `docker compose start rabbitmq` 恢复，失败消息需人工重放。未耗尽的待发布消息会自动重试。
+
+主队列 `smartpark.integrations` 与死信队列持久化，发布使用持久消息、mandatory 和发布确认，消费在数据库提交后手工 ACK。投递按至少一次与幂等处理设计，不承诺 exactly-once 或生产高可用；死信队列不自动清理，界面计数来自数据库，不是 broker 健康或队列深度。若已确认消息的 broker 卷丢失，不会自动重发 `Published`，应按灾难恢复设计处理，不能删卷当作普通演示操作。
+
 ### 其它验收入口
 
 - 数据平台：下载 `samples/assets.csv` 或 GeoJSON，预览、查看行级错误后确认；DOM 使用本地 PNG/JPEG 加已配准的西南/东北坐标。坐标为 WGS84 `[经度,纬度]`。
@@ -86,7 +97,7 @@ docker compose -f compose.verify.yaml -p smartpark-verify run --rm --no-deps e2e
 docker compose -f compose.verify.yaml -p smartpark-verify run --rm benchmarks
 ```
 
-前端实际 scripts：`typecheck`、`lint`、`test:unit`、`build`、`test:e2e`。浏览器验证仅桌面视口。后端采用真实 PostgreSQL 与 Redis，不以 EF InMemory 模拟事务。基准会在隔离库生成约 10 万遥测和 1 万资产，消耗 CPU、内存与磁盘；建议避免与其它重负载同时运行，不修改正式索引或清宿主机缓存。
+前端实际 scripts：`typecheck`、`lint`、`test:unit`、`build`、`test:e2e`。浏览器验证仅桌面视口。后端采用真实 PostgreSQL、Redis 与 RabbitMQ，不以 EF InMemory 模拟事务。测试队列 `smartpark.integrations.test` 与 E2E 队列 `smartpark.integrations.e2e` 共用隔离 broker、相互分开，均不连接演示代理。基准会在隔离库生成约 10 万遥测和 1 万资产，消耗 CPU、内存与磁盘；建议避免与其它重负载同时运行，不修改正式索引或清宿主机缓存。
 
 结果目录 `artifacts/`（不纳入版本库）：后端 TRX、Playwright 报告/截图、`benchmarks/<UTC时间>/results.json`、查询计划及实测章节。**命令入口存在不等于已经通过**；实际执行记录与未完成项见 [优化验证报告](docs/优化验证报告.md)。
 
@@ -98,7 +109,7 @@ docker compose start
 docker compose restart api web
 ```
 
-数据库、上传文件和 Data Protection 密钥使用命名卷。容器重建不清数据；正常启动执行迁移而不是重建数据库。模拟重启默认停用，模拟控制状态不会冒充现场持续运行。改变环境变量和重新构建不会刷新种子历史或重置密码。
+数据库、RabbitMQ 消息、上传文件和 Data Protection 密钥使用命名卷。容器重建不清数据；正常启动执行迁移而不是重建数据库。模拟重启默认停用，模拟控制状态不会冒充现场持续运行。改变环境变量和重新构建不会刷新种子历史或重置密码。
 
 不自动清理遥测、事件、任务、审计或已绑定照片；长期开模拟会增长数据库，正式留存/归档期限需要另行确认。Redis 是可重建缓存，不保存唯一业务事实。
 
@@ -111,9 +122,9 @@ docker compose stop web api
 docker compose exec -T postgres pg_dump -U park -d smartpark_demo > park-backup.sql
 ```
 
-同时备份 `smartpark-demo_uploads` 和 `smartpark-demo_keys`；只有 SQL 没有上传文件不能恢复照片和影像。恢复应先在独立新库验证，使用对应版本 PostgreSQL 的 `psql`，不要覆盖运行库。环境变量已改名时需调整上述参数。
+同时备份 `smartpark-demo_messages`、`smartpark-demo_uploads` 和 `smartpark-demo_keys`；已发布未消费消息与死信还依赖 RabbitMQ 卷，恢复时需协调数据库和代理状态，不能只恢复 SQL 后假定消息自动补发；只有 SQL 没有上传文件不能恢复照片和影像。恢复应先在独立新库验证，使用对应版本 PostgreSQL 的 `psql`，不要覆盖运行库。产生双阶段或多代日志后，新消息模型无法无损回退旧版消息 ID + 尝试序号唯一索引；不要直接执行迁移降级，回退版本需使用升级前备份并协调 RabbitMQ 状态，不删除或合并历史日志来迁就旧模型。环境变量已改名时需调整上述参数。
 
-> 破坏性警告：`docker compose down -v` 会永久删除该项目的数据库、上传和密钥卷。不要当作普通停止命令。本实施过程不执行删除卷、清库或改动用户现有实例的操作。
+> 破坏性警告：`docker compose down -v` 会永久删除该项目的数据库、RabbitMQ 消息、上传和密钥卷。不要当作普通停止命令。本实施过程不执行删除卷、清库或改动用户现有实例的操作。
 
 ## 设计与范围
 

@@ -294,6 +294,14 @@
         "resolved": "2.2.8",
         "contentHash": "zG2FApP5zxSx6OcdJQLbZDk2AVlN2BNQD6MorwIfV6gVj0RRxWPEp2LXAxqDGZqeNV1Zp0BNPcNaey/GXmTdvQ=="
       },
+      "RabbitMQ.Client": {
+        "type": "Transitive",
+        "resolved": "7.2.0",
+        "contentHash": "PPQ7cF7lwbhqC4up6en1bTUZlz06YqQwJecOJzsguTtyhNA7oL5uNDZIx/h6ZfcyPZV4V3DYKSCxfm4RUFLcbA==",
+        "dependencies": {
+          "System.Threading.RateLimiting": "8.0.0"
+        }
+      },
       "StackExchange.Redis": {
         "type": "Transitive",
         "resolved": "2.7.27",
@@ -303,6 +311,11 @@
           "Pipelines.Sockets.Unofficial": "2.2.8"
         }
       },
+      "System.Threading.RateLimiting": {
+        "type": "Transitive",
+        "resolved": "8.0.0",
+        "contentHash": "7mu9v0QDv66ar3DpGSZHg9NuNcxDaaAcnMULuZlaTpP9+hwXhrxNGsF5GmLkSHxFdb5bBc1TzeujsRgTrPWi+Q=="
+      },
       "smartpark.api": {
         "type": "Project",
         "dependencies": {
@@ -310,7 +323,8 @@
           "Microsoft.AspNetCore.Identity.EntityFrameworkCore": "[10.0.4, )",
           "Microsoft.AspNetCore.OpenApi": "[10.0.4, )",
           "Microsoft.Extensions.Caching.StackExchangeRedis": "[10.0.4, )",
-          "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )"
+          "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
+          "RabbitMQ.Client": "[7.2.0, )"
         }
       }
     }

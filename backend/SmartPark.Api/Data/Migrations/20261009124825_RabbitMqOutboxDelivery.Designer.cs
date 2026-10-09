@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SmartPark.Api.Data;
@@ -11,9 +12,11 @@ using SmartPark.Api.Data;
 namespace SmartPark.Api.Data.Migrations
 {
     [DbContext(typeof(ParkDbContext))]
-    partial class ParkDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261009124825_RabbitMqOutboxDelivery")]
+    partial class RabbitMqOutboxDelivery
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

@@ -164,6 +164,14 @@ public readonly record struct SeedSnapshot(int Parks, int Users, int Roles, int 
 
 public static class TestEnvironment
 {
+    public static void RequireIsolatedMessaging(string? host = null, string? queue = null)
+    {
+        host ??= Environment.GetEnvironmentVariable("RabbitMq__HostName");
+        queue ??= Environment.GetEnvironmentVariable("RabbitMq__QueueName");
+        if (string.IsNullOrWhiteSpace(host) || !string.Equals(queue, "smartpark.integrations.test", StringComparison.Ordinal))
+            throw new InvalidOperationException("Refusing messaging tests: configure RabbitMq__HostName explicitly and use queue smartpark.integrations.test on the isolated verification broker.");
+    }
+
     public static (string ParkDb, string Redis) RequireIsolatedServices(
         string? parkDb = null,
         string? redis = null,

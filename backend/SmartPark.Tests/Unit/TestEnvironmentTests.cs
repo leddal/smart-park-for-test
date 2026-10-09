@@ -27,6 +27,22 @@ public sealed class TestEnvironmentTests
         Assert.Contains("smartpark_test", error.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("smartpark.integrations")]
+    [InlineData("smartpark.integrations.e2e")]
+    [InlineData("")]
+    public void Rejects_messaging_queues_outside_backend_verification(string queue)
+    {
+        Assert.Throws<InvalidOperationException>(() => TestEnvironment.RequireIsolatedMessaging("rabbitmq", queue));
+    }
+
+    [Fact]
+    public void Allows_explicit_backend_test_broker_and_queue()
+    {
+        TestEnvironment.RequireIsolatedMessaging("rabbitmq", "smartpark.integrations.test");
+        Assert.Throws<InvalidOperationException>(() => TestEnvironment.RequireIsolatedMessaging("", "smartpark.integrations.test"));
+    }
+
     [Fact]
     public void Requires_explicit_TEST_ALLOWED_true()
     {
